@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Moment Stream</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #0f1117; color: #e2e8f0; padding: 24px; }
+    h1 { font-size: 1.2rem; font-weight: 600; color: #94a3b8; margin-bottom: 20px; letter-spacing: 0.05em; text-transform: uppercase; }
+    #status { font-size: 0.75rem; color: #64748b; margin-bottom: 24px; }
+    #status.connected { color: #22c55e; }
+    .session { margin-bottom: 32px; }
+    .session-header { font-size: 0.7rem; color: #64748b; font-family: monospace; margin-bottom: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th { text-align: left; padding: 6px 12px; color: #64748b; font-weight: 500; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #1e293b; }
+    td { padding: 8px 12px; border-bottom: 1px solid #1e293b; vertical-align: top; }
+    td.time { color: #94a3b8; font-family: monospace; white-space: nowrap; width: 90px; }
+    td.spoken { color: #93c5fd; }
+    td.visible { color: #86efac; }
+    tr.new { animation: flash 1s ease-out; }
+    @keyframes flash { from { background: #1e3a5f; } to { background: transparent; } }
+    #empty { color: #334155; font-size: 0.9rem; margin-top: 40px; text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>Moment Stream</h1>
+  <div id="status">Connecting…</div>
+  <div id="sessions"></div>
+  <div id="empty">Waiting for moments…</div>
+
+  <script>
+    const statusEl = document.getElementById('status')
+    const sessionsEl = document.getElementById('sessions')
+    const emptyEl = document.getElementById('empty')
+
+    // sessionId → { headerEl, tbodyEl }
+    const sessionTables = new Map()
+
+    function formatTime (capturedAt, chunkIndex) {
+      const start = chunkIndex * 20
+      const end = start + 20
+      const fmt = s => `${String(Math.floor(s / 60)).padStart(2,'0')}:${String(s % 60).padStart(2,'0')}`
+      return `${fmt(start)}–${fmt(end)}`
+    }
+
+    function getOrCreateTable (masterSessionId) {
+      if (sessionTables.has(masterSessionId)) return sessionTables.get(masterSessionId)
+
+      emptyEl.style.display = 'none'
+
+      const div = document.createElement('div')
+      div.className = 'session'
+
+      const header = document.createElement('div')
+      header.className = 'session-header'
+      header.textContent = `Session: ${masterSessionId}`
+
+      const table = document.createElement('table')
+      table.innerHTML = `<thead><tr><th>Time</th><th>Spoken</th><th>Visible</th></tr></thead>`
+      const tbody = document.createElement('tbody')
+      table.appendChild(tbody)
+
+      div.appendChild(header)
+      div.appendChild(table)
+      sessionsEl.prepend(div)
+
+      sessionTables.set(masterSessionId, { div, tbody })
+      return sessionTables.get(masterSessionId)
+    }
+
+    function renderChunk ({ masterSessionId, chunkIndex, capturedAt, moments }) {
+      const { tbody } = getOrCreateTable(masterSessionId)
+      if (!moments?.length) return
+
+      for (const m of moments) {
+        const tr = document.createElement('tr')
+        tr.className = 'new'
+        tr.innerHTML = `
+          <td class="time">${formatTime(capturedAt, chunkIndex)}</td>
+          <td class="spoken">${m.spoken ?? ''}</td>
+          <td class="visible">${m.visible ?? ''}</td>
+        `
+        tbody.appendChild(tr)
+        setTimeout(() => tr.classList.remove('new'), 1000)
+      }
+    }
+
+    function connect () {
+      const es = new EventSource('/stream')
+
+      es.onopen = () => {
+        statusEl.textContent = 'Connected — live'
+        statusEl.className = 'connected'
+      }
+
+      es.onmessage = e => {
+        try { renderChunk(JSON.parse(e.data)) } catch {}
+      }
+
+      es.onerror = () => {
+        statusEl.textContent = 'Reconnecting…'
+        statusEl.className = ''
+        es.close()
+        setTimeout(connect, 3000)
+      }
+    }
+
+    connect()
+  </script>
+</body>
+</html>
