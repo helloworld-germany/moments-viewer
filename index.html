@@ -36,12 +36,12 @@
 
     // sessionId → { headerEl, tbodyEl }
     const sessionTables = new Map()
+    // tracks already-rendered moment IDs to avoid duplicates on SSE reconnect
+    const renderedMoments = new Set()
 
-    function formatTime (capturedAt, chunkIndex) {
-      const start = chunkIndex * 20
-      const end = start + 20
-      const fmt = s => `${String(Math.floor(s / 60)).padStart(2,'0')}:${String(s % 60).padStart(2,'0')}`
-      return `${fmt(start)}–${fmt(end)}`
+    function formatTime (startMs, endMs) {
+      const fmt = ms => { const s = Math.floor(ms / 1000); return `${String(Math.floor(s / 60)).padStart(2,'0')}:${String(s % 60).padStart(2,'0')}` }
+      return `${fmt(startMs)}–${fmt(endMs)}`
     }
 
     function getOrCreateTable (masterSessionId) {
@@ -74,14 +74,18 @@
       if (!moments?.length) return
 
       for (const m of moments) {
+        const key = `${masterSessionId}:${m.id}`
+        if (renderedMoments.has(key)) continue
+        renderedMoments.add(key)
+
         const tr = document.createElement('tr')
         tr.className = 'new'
         tr.innerHTML = `
-          <td class="time">${formatTime(capturedAt, chunkIndex)}</td>
-          <td class="spoken">${m.spoken ?? ''}</td>
-          <td class="visible">${m.visible ?? ''}</td>
+          <td class="time">${formatTime(m.startMs, m.endMs)}</td>
+          <td class="spoken">${m.spokenText ?? ''}</td>
+          <td class="visible">${m.visibleText ?? ''}</td>
         `
-        tbody.appendChild(tr)
+        tbody.insertBefore(tr, tbody.firstChild)
         setTimeout(() => tr.classList.remove('new'), 1000)
       }
     }
