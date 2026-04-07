@@ -94,8 +94,10 @@ const server = http.createServer((req, res) => {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
-      'Access-Control-Allow-Origin': '*'
+      'Access-Control-Allow-Origin': '*',
+      'X-Accel-Buffering': 'no'
     })
+    res.write(':ok\n\n')  // flush headers through proxy immediately
     // Send current state immediately on connect
     for (const [masterSessionId, s] of sessions) {
       for (const chunk of s.chunks) {
