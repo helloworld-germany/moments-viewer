@@ -114,6 +114,52 @@ az ad app credential reset --id <appId> --years 1
 
 This section applies specifically to deploying the browser-based viewer. For other integrations, the prerequisites above are sufficient.
 
+### Passwordless deployment with managed identity (recommended) ✨
+
+The application uses `DefaultAzureCredential` and supports authentication without storing secrets. This is the **recommended approach** for running on Azure.
+
+**Prerequisites:**
+- Your consumer application has a managed identity (either system-assigned or user-assigned)
+- Share the following with the vidaugment operator:
+  - Your Azure **tenant ID** (where the managed identity exists)
+  - The **object ID** of your managed identity
+
+**The operator will:**
+1. Grant your managed identity the "Azure Service Bus Data Receiver" role on your `moments-<short-name>` queue
+2. Confirm completion
+
+**Deployment (no secrets to manage):**
+
+```bash
+az containerapp up \
+  --name moments-viewer \
+  --resource-group <your-rg> \
+  --source https://github.com/helloworld-germany/moments-viewer \
+  --system-assigned-identity \
+  --env-vars \
+    "SERVICE_BUS_FQDN=vidaugment-bus.servicebus.windows.net"
+```
+
+The system-assigned managed identity is created automatically. Provide its **object ID** to the operator.
+
+**Verify it works:**
+
+```bash
+az containerapp logs show -n moments-viewer -g <your-rg> --tail 20
+```
+
+You should see:
+```
+[sb] Polling vidaugment-bus.servicebus.windows.net/moments
+[identity] Authenticated with managed identity
+```
+
+---
+
+### Password-based deployment (alternative)
+
+If managed identity is not available in your environment, you can use a client secret instead.
+
 ### 1. Create a resource group (if needed)
 
 ```bash
@@ -178,22 +224,17 @@ az containerapp update \
   --image <your-acr-name>.azurecr.io/moments-viewer:latest
 ```
 
-## Verify it works
-
-Check logs for successful token refresh:
-
-```bash
-az containerapp logs show -n moments-viewer -g <your-rg> --tail 20
-```
-
-You should see:
-```
-[sb] Polling vidaugment-bus.servicebus.windows.net/moments
-[identity] Token refreshed, expires in 59 min
-```
-
 ## Local development
 
+**With managed identity (recommended):**
+```bash
+npm install
+SERVICE_BUS_FQDN=vidaugment-bus.servicebus.windows.net node server.js
+```
+
+The app will authenticate using `DefaultAzureCredential` (local Azure CLI credentials, Visual Studio Code Azure sign-in, or environment variables).
+
+**With client secret (alternative):**
 ```bash
 npm install
 AZURE_TENANT_ID=... AZURE_APP_CLIENT_ID=... AZURE_CLIENT_SECRET=... SERVICE_BUS_FQDN=vidaugment-bus.servicebus.windows.net node server.js
