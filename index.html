@@ -15,9 +15,11 @@
     table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
     th { text-align: left; padding: 6px 12px; color: #64748b; font-weight: 500; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #1e293b; }
     td { padding: 8px 12px; border-bottom: 1px solid #1e293b; vertical-align: top; }
-    td.time { color: #94a3b8; font-family: monospace; white-space: nowrap; width: 90px; }
-    td.spoken { color: #93c5fd; }
-    td.visible { color: #86efac; }
+    td.time { color: #94a3b8; font-family: monospace; white-space: nowrap; width: 80px; }
+    td.rec  { color: #64748b; font-family: monospace; white-space: nowrap; width: 50px; text-align: right; }
+    td.spoken { color: #93c5fd; width: 40%; }
+    td.visible { color: #86efac; width: 40%; }
+    td.spoken div, td.visible div { max-height: calc(5 * 1.5em); overflow-y: auto; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
     tr.new { animation: flash 1s ease-out; }
     @keyframes flash { from { background: #1e3a5f; } to { background: transparent; } }
     #empty { color: #334155; font-size: 0.9rem; margin-top: 40px; text-align: center; }
@@ -39,9 +41,13 @@
     // tracks already-rendered moment IDs to avoid duplicates on SSE reconnect
     const renderedMoments = new Set()
 
-    function formatTime (startMs, endMs) {
-      const fmt = ms => { const s = Math.floor(ms / 1000); return `${String(Math.floor(s / 60)).padStart(2,'0')}:${String(s % 60).padStart(2,'0')}` }
-      return `${fmt(startMs)}–${fmt(endMs)}`
+    function formatCapturedAt (capturedAt) {
+      if (!capturedAt && capturedAt !== 0) return '—'
+      let ms
+      if (typeof capturedAt === 'string') ms = new Date(capturedAt).getTime()
+      else ms = capturedAt > 1e12 ? capturedAt : capturedAt * 1000
+      if (isNaN(ms)) return '—'
+      return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     }
 
     function getOrCreateTable (masterSessionId) {
@@ -57,7 +63,7 @@
       header.textContent = `Session: ${masterSessionId}`
 
       const table = document.createElement('table')
-      table.innerHTML = `<thead><tr><th>Time</th><th>Spoken</th><th>Visible</th></tr></thead>`
+      table.innerHTML = `<thead><tr><th>Time</th><th>Rec #</th><th>Spoken</th><th>Visible</th></tr></thead>`
       const tbody = document.createElement('tbody')
       table.appendChild(tbody)
 
@@ -73,6 +79,9 @@
       const { tbody } = getOrCreateTable(masterSessionId)
       if (!moments?.length) return
 
+      const timeStr = formatCapturedAt(capturedAt)
+      const recStr  = chunkIndex != null ? `#${chunkIndex}` : '—'
+
       for (const m of moments) {
         const key = `${masterSessionId}:${m.id}`
         if (renderedMoments.has(key)) continue
@@ -80,11 +89,32 @@
 
         const tr = document.createElement('tr')
         tr.className = 'new'
-        tr.innerHTML = `
-          <td class="time">${formatTime(m.startMs, m.endMs)}</td>
-          <td class="spoken">${m.spokenText ?? ''}</td>
-          <td class="visible">${m.visibleText ?? ''}</td>
-        `
+
+        const tdTime = document.createElement('td')
+        tdTime.className = 'time'
+        tdTime.textContent = timeStr
+
+        const tdRec = document.createElement('td')
+        tdRec.className = 'rec'
+        tdRec.textContent = recStr
+
+        const tdSpoken = document.createElement('td')
+        tdSpoken.className = 'spoken'
+        const divSpoken = document.createElement('div')
+        divSpoken.textContent = m.spokenText ?? ''
+        tdSpoken.appendChild(divSpoken)
+
+        const tdVisible = document.createElement('td')
+        tdVisible.className = 'visible'
+        const divVisible = document.createElement('div')
+        divVisible.textContent = m.visibleText ?? ''
+        tdVisible.appendChild(divVisible)
+
+        tr.appendChild(tdTime)
+        tr.appendChild(tdRec)
+        tr.appendChild(tdSpoken)
+        tr.appendChild(tdVisible)
+
         tbody.insertBefore(tr, tbody.firstChild)
         setTimeout(() => tr.classList.remove('new'), 1000)
       }
