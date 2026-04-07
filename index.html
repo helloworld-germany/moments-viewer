@@ -12,14 +12,19 @@
     #status.connected { color: #22c55e; }
     .session { margin-bottom: 32px; }
     .session-header { font-size: 0.7rem; color: #64748b; font-family: monospace; margin-bottom: 8px; }
+    .ctx-badge { font-style: italic; color: #1e3a4a; margin-left: 6px; }
     table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
     th { text-align: left; padding: 6px 12px; color: #64748b; font-weight: 500; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #1e293b; }
     td { padding: 8px 12px; border-bottom: 1px solid #1e293b; vertical-align: top; }
     td.time { color: #94a3b8; font-family: monospace; white-space: nowrap; width: 80px; }
     td.rec  { color: #64748b; font-family: monospace; white-space: nowrap; width: 50px; text-align: right; }
-    td.spoken { color: #93c5fd; width: 40%; }
-    td.visible { color: #86efac; width: 40%; }
-    td.spoken div, td.visible div { max-height: calc(5 * 1.5em); overflow-y: auto; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+    td.spoken { color: #93c5fd; width: 35%; }
+    td.visible { color: #86efac; width: 35%; }
+    td.ctx { color: #c4b5fd; width: 30%; }
+    td.spoken div, td.visible div, td.ctx div { max-height: calc(5 * 1.5em); overflow-y: auto; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+    .empty-hint { color: #253345; font-style: italic; }
+    .session.no-ctx th.ctx-col,
+    .session.no-ctx td.ctx { display: none; }
     tr.new { animation: flash 1s ease-out; }
     @keyframes flash { from { background: #1e3a5f; } to { background: transparent; } }
     #empty { color: #334155; font-size: 0.9rem; margin-top: 40px; text-align: center; }
@@ -56,14 +61,18 @@
       emptyEl.style.display = 'none'
 
       const div = document.createElement('div')
-      div.className = 'session'
+      div.className = 'session no-ctx'
 
       const header = document.createElement('div')
       header.className = 'session-header'
-      header.textContent = `Session: ${masterSessionId}`
+      header.appendChild(document.createTextNode(`Session: ${masterSessionId}`))
+      const ctxBadge = document.createElement('span')
+      ctxBadge.className = 'ctx-badge'
+      ctxBadge.textContent = '· no context'
+      header.appendChild(ctxBadge)
 
       const table = document.createElement('table')
-      table.innerHTML = `<thead><tr><th>Time</th><th>Rec #</th><th>Spoken</th><th>Visible</th></tr></thead>`
+      table.innerHTML = `<thead><tr><th>Time</th><th>Rec #</th><th>Spoken</th><th>Visible</th><th class="ctx-col">Context</th></tr></thead>`
       const tbody = document.createElement('tbody')
       table.appendChild(tbody)
 
@@ -71,13 +80,23 @@
       div.appendChild(table)
       sessionsEl.prepend(div)
 
-      sessionTables.set(masterSessionId, { div, tbody })
+      sessionTables.set(masterSessionId, { div, tbody, ctxBadge, hasContext: false })
       return sessionTables.get(masterSessionId)
     }
 
-    function renderChunk ({ masterSessionId, chunkIndex, capturedAt, moments }) {
-      const { tbody } = getOrCreateTable(masterSessionId)
+    function ensureContextVisible (sessionData) {
+      if (sessionData.hasContext) return
+      sessionData.hasContext = true
+      sessionData.div.classList.remove('no-ctx')
+      sessionData.ctxBadge.style.display = 'none'
+    }
+
+    function renderChunk ({ masterSessionId, chunkIndex, capturedAt, moments, context }) {
+      const sessionData = getOrCreateTable(masterSessionId)
+      const { tbody } = sessionData
       if (!moments?.length) return
+
+      if (context != null) ensureContextVisible(sessionData)
 
       const timeStr = formatCapturedAt(capturedAt)
       const recStr  = chunkIndex != null ? `#${chunkIndex}` : '—'
@@ -101,19 +120,47 @@
         const tdSpoken = document.createElement('td')
         tdSpoken.className = 'spoken'
         const divSpoken = document.createElement('div')
-        divSpoken.textContent = m.spokenText ?? ''
+        if (m.spokenText) {
+          divSpoken.textContent = m.spokenText
+        } else {
+          const hint = document.createElement('span')
+          hint.className = 'empty-hint'
+          hint.textContent = 'no audio'
+          divSpoken.appendChild(hint)
+        }
         tdSpoken.appendChild(divSpoken)
 
         const tdVisible = document.createElement('td')
         tdVisible.className = 'visible'
         const divVisible = document.createElement('div')
-        divVisible.textContent = m.visibleText ?? ''
+        if (m.visibleText) {
+          divVisible.textContent = m.visibleText
+        } else {
+          const hint = document.createElement('span')
+          hint.className = 'empty-hint'
+          hint.textContent = 'no vision'
+          divVisible.appendChild(hint)
+        }
         tdVisible.appendChild(divVisible)
+
+        const tdCtx = document.createElement('td')
+        tdCtx.className = 'ctx'
+        const divCtx = document.createElement('div')
+        if (context != null) {
+          divCtx.textContent = typeof context === 'string' ? context : JSON.stringify(context)
+        } else {
+          const hint = document.createElement('span')
+          hint.className = 'empty-hint'
+          hint.textContent = 'no context'
+          divCtx.appendChild(hint)
+        }
+        tdCtx.appendChild(divCtx)
 
         tr.appendChild(tdTime)
         tr.appendChild(tdRec)
         tr.appendChild(tdSpoken)
         tr.appendChild(tdVisible)
+        tr.appendChild(tdCtx)
 
         tbody.insertBefore(tr, tbody.firstChild)
         setTimeout(() => tr.classList.remove('new'), 1000)
