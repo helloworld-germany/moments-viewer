@@ -63,19 +63,19 @@ async function pollServiceBus () {
 
   for (;;) {
     try {
-      const messages = await receiver.receiveMessages(10, { maxWaitTimeInMs: 5000 })
+      const messages = await receiver.receiveMessages(10, { maxWaitTimeInMs: 1000 })
       for (const msg of messages) {
         const event = msg.body
         // Event Grid wraps in array when delivered via SB
         const data = Array.isArray(event) ? event[0].data : (event.data ?? event)
-        const { masterSessionId, sessionId, chunkIndex, capturedAt, moments } = data
+        const { masterSessionId, sessionId, chunkIndex, capturedAt, moments, context } = data
 
         if (!sessions.has(masterSessionId)) sessions.set(masterSessionId, { chunks: [], lastSeen: Date.now() })
         const session = sessions.get(masterSessionId)
-        session.chunks.push({ sessionId, chunkIndex, capturedAt, moments })
+        session.chunks.push({ sessionId, chunkIndex, capturedAt, moments, context })
         session.lastSeen = Date.now()
 
-        const payload = JSON.stringify({ masterSessionId, sessionId, chunkIndex, capturedAt, moments })
+        const payload = JSON.stringify({ masterSessionId, sessionId, chunkIndex, capturedAt, moments, context })
         for (const res of clients) {
           res.write(`data: ${payload}\n\n`)
         }

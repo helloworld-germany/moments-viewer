@@ -99,7 +99,7 @@
       if (context != null) ensureContextVisible(sessionData)
 
       const timeStr = formatCapturedAt(capturedAt)
-      const recStr  = chunkIndex != null ? `#${chunkIndex}` : '—'
+      const recStr  = chunkIndex != null ? `#${chunkIndex + 1}` : '—'
 
       for (const m of moments) {
         const key = `${masterSessionId}:${m.id}`
@@ -108,6 +108,7 @@
 
         const tr = document.createElement('tr')
         tr.className = 'new'
+        tr.dataset.chunkIndex = chunkIndex ?? Infinity
 
         const tdTime = document.createElement('td')
         tdTime.className = 'time'
@@ -162,7 +163,15 @@
         tr.appendChild(tdVisible)
         tr.appendChild(tdCtx)
 
-        tbody.insertBefore(tr, tbody.firstChild)
+        let inserted = false
+        for (const existingRow of tbody.rows) {
+          if (chunkIndex < Number(existingRow.dataset.chunkIndex)) {
+            tbody.insertBefore(tr, existingRow)
+            inserted = true
+            break
+          }
+        }
+        if (!inserted) tbody.appendChild(tr)
         setTimeout(() => tr.classList.remove('new'), 1000)
       }
     }
